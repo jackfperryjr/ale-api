@@ -121,13 +121,13 @@ export default async function BreweryPage() {
           <div>
             <h2 className="text-lg font-bold text-ale-amber">Brewmaster Queue</h2>
             <p className="text-xs text-ale-muted mt-0.5">
-              Content flagged by users for human sign-off. Verify to mark content as authentic; reject to mark it synthetic.
+              Content flagged by users for human sign-off. Verify to mark content as genuine; reject to mark it synthetic.
             </p>
           </div>
 
           {queue.length === 0 ? (
             <div className="bg-ale-card border border-ale-border rounded-lg px-5 py-8 text-center text-ale-muted italic text-sm">
-              Queue is empty — nothing waiting for review.
+              Queue is empty — nothing brewing.
             </div>
           ) : (
             <div className="bg-ale-card border border-ale-border rounded-lg overflow-hidden">
