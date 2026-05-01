@@ -18,13 +18,6 @@
   animation: ale-spin 1.2s linear infinite;
 }
 
-#ale-bottle-cap.ale-real {
-  filter: drop-shadow(0 0 8px #00C875) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
-}
-
-#ale-bottle-cap.ale-skunked {
-  filter: drop-shadow(0 0 8px #E03050) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
-}
 
 @keyframes ale-spin {
   from { transform: rotate(0deg); }
@@ -229,7 +222,7 @@
 .alep-btn-verify:hover:not(:disabled) { border-color: #E8A020; color: #E8A020; }
 .alep-btn-verify:disabled { opacity: 0.3; cursor: not-allowed; }
 
-.alep-btn-notary {
+.alep-btn-brewmaster {
   width: 100%;
   padding: 7px;
   background: transparent;
@@ -242,8 +235,8 @@
   cursor: pointer;
   transition: background 0.15s;
 }
-.alep-btn-notary:hover:not(:disabled) { background: rgba(232, 160, 32, 0.12); }
-.alep-btn-notary:disabled { opacity: 0.4; cursor: not-allowed; }
+.alep-btn-brewmaster:hover:not(:disabled) { background: rgba(232, 160, 32, 0.12); }
+.alep-btn-brewmaster:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .alep-status {
   padding: 2px 12px 8px;
