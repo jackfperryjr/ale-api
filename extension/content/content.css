@@ -10,11 +10,21 @@
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.7));
 }
 
-#ale-bottle-cap:hover {
-  transform: scale(1.15);
+#ale-img-cap {
+  position: fixed;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+  z-index: 2147483647;
+  display: none;
+  transition: transform 0.2s ease, filter 0.3s ease;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.7));
 }
 
-#ale-bottle-cap::after {
+#ale-bottle-cap:hover, #ale-img-cap:hover { transform: scale(1.15); }
+
+#ale-bottle-cap::after,
+#ale-img-cap::after {
   content: attr(data-tooltip);
   position: absolute;
   top: calc(100% + 6px);
@@ -35,7 +45,8 @@
   transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
-#ale-bottle-cap:hover::after {
+#ale-bottle-cap:hover::after,
+#ale-img-cap:hover::after {
   opacity: 1;
   transform: translateY(0);
 }

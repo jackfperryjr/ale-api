@@ -1,8 +1,10 @@
-const ALE_CAP_ID   = 'ale-bottle-cap';
-const ALE_PANEL_ID = 'ale-panel';
+const ALE_CAP_ID     = 'ale-bottle-cap';
+const ALE_IMG_CAP_ID = 'ale-img-cap';
+const ALE_PANEL_ID   = 'ale-panel';
 const CIRCUMFERENCE = 2 * Math.PI * 40;
 
-let currentUrl     = window.location.href;
+let currentUrl     = window.location.href; // tracks page URL for navigation detection
+let analyzeUrl     = window.location.href; // what actually gets sent to the API (may be img.src)
 let currentVideoId = null;
 let lastAnalysisId = null;
 
@@ -93,21 +95,37 @@ function buildPanel() {
   return panel;
 }
 
-function openPanel(player) {
+function openPanel(anchorEl, { imageUrl = null } = {}) {
+  // Capture rect before closePanel hides the element (hidden elements return zeros)
+  const anchorRect = anchorEl.getBoundingClientRect();
   closePanel();
-  currentVideoId = getVideoId();
+  if (imageUrl) {
+    analyzeUrl     = imageUrl; // analyze the image URL, not the page URL
+    currentVideoId = null;
+  } else {
+    analyzeUrl     = currentUrl;
+    currentVideoId = getVideoId();
+  }
   lastAnalysisId = null;
 
   const panel = buildPanel();
-  panel.querySelector('#alep-url').textContent = truncateUrl(currentUrl);
-  player.appendChild(panel);
+  panel.querySelector('#alep-url').textContent = truncateUrl(analyzeUrl);
+
+  if (imageUrl) {
+    panel.style.position = 'fixed';
+    panel.style.zIndex   = '2147483647';
+    panel.style.top      = Math.min(anchorRect.bottom + 8, window.innerHeight - 420) + 'px';
+    panel.style.right    = Math.max(window.innerWidth - anchorRect.right, 8) + 'px';
+    document.body.appendChild(panel);
+  } else {
+    anchorEl.appendChild(panel);
+  }
 
   // Show cached result instantly; otherwise kick off a fresh analysis
-  chrome.storage.local.get(currentUrl, (cache) => {
-    if (cache[currentUrl]) {
-      lastAnalysisId = cache[currentUrl].id ?? null;
-      renderScore(cache[currentUrl]);
-      // Reveal re-analyze in case they want a fresh scan
+  chrome.storage.local.get(analyzeUrl, (cache) => {
+    if (cache[analyzeUrl]) {
+      lastAnalysisId = cache[analyzeUrl].id ?? null;
+      renderScore(cache[analyzeUrl]);
       const reBtn = document.getElementById('alep-verify');
       if (reBtn) reBtn.style.display = 'block';
     } else {
@@ -117,7 +135,13 @@ function openPanel(player) {
 }
 
 function closePanel() {
-  document.getElementById(ALE_PANEL_ID)?.remove();
+  const panel = document.getElementById(ALE_PANEL_ID);
+  panel?.remove();
+  // Only hide the image cap when a panel was actually open (not during openPanel's pre-close)
+  if (panel) {
+    const imgCap = document.getElementById(ALE_IMG_CAP_ID);
+    if (imgCap) imgCap.style.display = 'none';
+  }
 }
 
 // ── Panel state ───────────────────────────────────────────────────────────────
@@ -183,8 +207,8 @@ function renderScore(data) {
   const labelEl = panelEl('alep-score-label');
   if (labelEl) { labelEl.textContent = label; labelEl.style.color = color; }
 
-  // Update bottle cap ring color
-  const cap = document.getElementById(ALE_CAP_ID);
+  // Update bottle cap ring color (video or image cap)
+  const cap = document.getElementById(ALE_CAP_ID) || document.getElementById(ALE_IMG_CAP_ID);
   if (cap) {
     cap.classList.remove('ale-analyzing');
     const ring = cap.querySelector('.ale-cap-ring');
@@ -209,7 +233,7 @@ async function runAnalysis() {
 
   const result = await chrome.runtime.sendMessage({
     type: 'ANALYZE',
-    url: currentUrl,
+    url: analyzeUrl,
     videoId: currentVideoId,
   });
 
@@ -221,7 +245,7 @@ async function runAnalysis() {
   }
 
   lastAnalysisId = result.id;
-  chrome.storage.local.set({ [currentUrl]: result });
+  chrome.storage.local.set({ [analyzeUrl]: result });
   renderScore(result);
   if (verifyBtn) { verifyBtn.disabled = false; verifyBtn.style.display = 'block'; }
 }
@@ -233,7 +257,7 @@ async function requestBrewmaster() {
 
   const result = await chrome.runtime.sendMessage({
     type: 'QUEUE_BREWMASTER',
-    url: currentUrl,
+    url: analyzeUrl,
     videoId: currentVideoId,
     analysisId: lastAnalysisId,
   });
@@ -292,10 +316,123 @@ function resetCap() {
 
 function injectBottleCap(player) {
   if (document.getElementById(ALE_CAP_ID)) return;
-  const { width, height } = player.getBoundingClientRect();
-  if (width === 0 || height === 0) return; // not ready yet — observer will retry
   player.style.position = 'relative';
   player.appendChild(buildCap());
+}
+
+// ── Image analysis ────────────────────────────────────────────────────────────
+
+const taggedImages = new WeakSet();
+let imgCapTimer = null;
+
+function isQualifyingImage(img) {
+  return (
+    img instanceof HTMLImageElement &&
+    img.naturalWidth  >= 200 &&
+    img.naturalHeight >= 200 &&
+    !img.closest(`#${ALE_IMG_CAP_ID}, #${ALE_PANEL_ID}`)
+  );
+}
+
+function buildImgCap() {
+  const cap = document.createElement('div');
+  cap.id = ALE_IMG_CAP_ID;
+  cap.dataset.tooltip = 'ALE — Click to analyze';
+  const iconUrl = chrome.runtime.getURL('icons/android-chrome-192x192.png');
+  cap.innerHTML = `
+    <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <clipPath id="ale-img-clip">
+          <circle cx="16" cy="16" r="12"/>
+        </clipPath>
+      </defs>
+      <circle class="ale-cap-ring" cx="16" cy="16" r="14" fill="#0D1A22" stroke="#E8A020" stroke-width="2"/>
+      <image href="${iconUrl}" x="4" y="4" width="24" height="24" clip-path="url(#ale-img-clip)"/>
+    </svg>
+  `;
+
+  // stopPropagation only — preventDefault suppresses click on body-level fixed elements
+  ['pointerdown', 'mousedown', 'pointerup', 'mouseup'].forEach((evt) => {
+    cap.addEventListener(evt, (e) => e.stopPropagation());
+  });
+
+  cap.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (document.getElementById(ALE_PANEL_ID)) {
+      closePanel();
+    } else if (cap._targetImg) {
+      openPanel(cap, { imageUrl: cap._targetImg.src });
+    }
+  });
+
+  cap.addEventListener('mouseleave', (e) => {
+    clearTimeout(imgCapTimer);
+    if (e.relatedTarget?.closest(`#${ALE_PANEL_ID}`)) return;
+    imgCapTimer = setTimeout(() => {
+      if (!document.getElementById(ALE_PANEL_ID)) cap.style.display = 'none';
+    }, 250);
+  });
+
+  document.body.appendChild(cap);
+  return cap;
+}
+
+function getImgCap() {
+  return document.getElementById(ALE_IMG_CAP_ID) || buildImgCap();
+}
+
+function showImgCap(img) {
+  const cap = getImgCap();
+  const rect = img.getBoundingClientRect();
+  cap.style.top   = (rect.top  + 10) + 'px';
+  cap.style.right = (window.innerWidth - rect.right + 10) + 'px';
+  cap.style.display = 'block';
+
+  // Reset ring and tooltip when moving to a different image
+  if (cap._targetImg !== img) {
+    cap._targetImg = img;
+    const ring = cap.querySelector('.ale-cap-ring');
+    if (ring) ring.setAttribute('stroke', '#E8A020');
+    cap.dataset.tooltip = 'ALE — Click to analyze';
+  }
+}
+
+function tagImage(img) {
+  if (taggedImages.has(img)) return;
+  taggedImages.add(img);
+
+  img.addEventListener('mouseenter', () => {
+    clearTimeout(imgCapTimer);
+    // Debounce: only show cap if the mouse lingers — prevents bouncing while scrolling
+    imgCapTimer = setTimeout(() => {
+      if (isQualifyingImage(img)) showImgCap(img);
+    }, 350);
+  });
+
+  img.addEventListener('mouseleave', (e) => {
+    clearTimeout(imgCapTimer);
+    if (e.relatedTarget?.closest(`#${ALE_IMG_CAP_ID}`)) return;
+    // Grace period: keep cap visible briefly so user can move their mouse to it
+    imgCapTimer = setTimeout(() => {
+      if (!document.getElementById(ALE_PANEL_ID)) {
+        const cap = document.getElementById(ALE_IMG_CAP_ID);
+        if (cap) cap.style.display = 'none';
+      }
+    }, 250);
+  });
+}
+
+function tagImages() {
+  document.querySelectorAll('img').forEach((img) => {
+    if (taggedImages.has(img)) return;
+    if (isQualifyingImage(img)) {
+      tagImage(img);
+    } else if (!img.complete) {
+      img.addEventListener('load', () => {
+        if (isQualifyingImage(img)) tagImage(img);
+      }, { once: true });
+    }
+  });
 }
 
 // Walk up from a video element to the nearest ancestor that's large enough to host the cap
@@ -309,6 +446,29 @@ function findVideoContainer(video) {
   return video.parentElement;
 }
 
+function injectFacebookReel() {
+  if (document.getElementById(ALE_CAP_ID)) return;
+  let attempts = 0;
+  const poll = setInterval(() => {
+    // Stop if cap appeared, URL left the reel, or we've exceeded ~6s
+    if (document.getElementById(ALE_CAP_ID) ||
+        !window.location.pathname.includes('/reel/') ||
+        ++attempts > 20) {
+      clearInterval(poll);
+      return;
+    }
+    const v = document.querySelector(
+      '[data-pagelet*="Reel"] video, [data-pagelet*="Stories"] video, video'
+    );
+    if (!v?.parentElement) return;
+    const { width, height } = v.parentElement.getBoundingClientRect();
+    if (width > 0 && height > 0) {
+      clearInterval(poll);
+      injectBottleCap(v.parentElement);
+    }
+  }, 300);
+}
+
 function tryInject() {
   const host = window.location.hostname;
   if (host === 'www.youtube.com') {
@@ -317,13 +477,8 @@ function tryInject() {
   } else if (host === 'x.com' || host === 'twitter.com') {
     document.querySelectorAll('[data-testid="videoPlayer"]').forEach(injectBottleCap);
   } else if (host === 'www.facebook.com' || host === 'facebook.com') {
-    // Only inject on reel pages, not the feed
     if (!window.location.pathname.includes('/reel/')) return;
-    const reelWrap = document.querySelector('[data-pagelet*="Reel"], [data-pagelet*="Stories"]');
-    const video = reelWrap
-      ? reelWrap.querySelector('video')
-      : document.querySelector('video');
-    if (video?.parentElement) injectBottleCap(video.parentElement);
+    injectFacebookReel();
   } else if (host === 'www.tiktok.com') {
     const player = document.querySelector('[class*="DivVideoWrapper"], video');
     if (player?.parentElement) injectBottleCap(player.parentElement);
@@ -337,15 +492,19 @@ function tryInject() {
 }
 
 tryInject();
+tagImages();
 
-const observer = new MutationObserver(() => {
+const observer = new MutationObserver((mutations) => {
   const newUrl = window.location.href;
   if (newUrl !== currentUrl) {
     currentUrl = newUrl;
+    analyzeUrl = newUrl;
     resetCap();
     tryInject();
-  } else if (!document.getElementById(ALE_CAP_ID)) {
-    tryInject();
+    tagImages();
+  } else {
+    if (!document.getElementById(ALE_CAP_ID)) tryInject();
+    if (mutations.some((m) => m.addedNodes.length > 0)) tagImages();
   }
 });
 observer.observe(document.body, { childList: true, subtree: true });
