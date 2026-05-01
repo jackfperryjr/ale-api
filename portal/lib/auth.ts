@@ -2,7 +2,7 @@ import { NextAuthOptions } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
 
 // Comma-separated list of Google emails allowed into the Brewery.
-// Set BREWERY_ALLOWED_EMAILS=you@gmail.com in .env.local
+// Set BREWERY_ALLOWED_EMAILS=you@gmail.com in portal/.env
 const ALLOWED = (process.env.BREWERY_ALLOWED_EMAILS ?? '')
   .split(',')
   .map((e) => e.trim().toLowerCase())
@@ -16,8 +16,8 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    signIn({ profile }) {
-      const email = profile?.email?.toLowerCase() ?? ''
+    signIn({ user }) {
+      const email = user.email?.toLowerCase() ?? ''
       return ALLOWED.includes(email)
     },
   },

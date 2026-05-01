@@ -41,6 +41,12 @@
     "192": "icons/android-chrome-192x192.png",
     "512": "icons/android-chrome-512x512.png"
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*.png"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "action": {
     "default_popup": "popup/popup.html",
     "default_icon": {
