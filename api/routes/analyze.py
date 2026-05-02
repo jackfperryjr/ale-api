@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from ..auth import require_api_key
 from ..db.database import get_db
 from ..db.models import Analysis, BrewmasterQueue
 from ..db.users import ANALYZE_COST, get_or_create_user
@@ -67,7 +68,7 @@ async def analyze(req: AnalyzeRequest, db: Session = Depends(get_db)):
     }
 
 
-@router.get("/analyses")
+@router.get("/analyses", dependencies=[Depends(require_api_key)])
 def list_analyses(limit: int = 100, db: Session = Depends(get_db)):
     analyses = (
         db.query(Analysis)
@@ -113,7 +114,7 @@ def list_analyses(limit: int = 100, db: Session = Depends(get_db)):
     return result
 
 
-@router.get("/analyze/{analysis_id}")
+@router.get("/analyze/{analysis_id}", dependencies=[Depends(require_api_key)])
 def get_analysis(analysis_id: str, db: Session = Depends(get_db)):
     record = db.query(Analysis).filter(Analysis.id == analysis_id).first()
     if not record:

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from ..auth import require_api_key
 from ..db.database import get_db
 from ..db.models import Analysis, BrewmasterQueue
 from ..db.users import QUEUE_COST, get_or_create_user
@@ -75,7 +76,7 @@ def add_to_queue(req: QueueRequest, db: Session = Depends(get_db)):
     return {"id": item.id, "status": item.status, "queued": True, "credits": user.credits if user else None}
 
 
-@router.get("/stats")
+@router.get("/stats", dependencies=[Depends(require_api_key)])
 def get_stats(db: Session = Depends(get_db)):
     queue_pending = (
         db.query(BrewmasterQueue)
@@ -95,7 +96,7 @@ def get_stats(db: Session = Depends(get_db)):
     }
 
 
-@router.get("/queue")
+@router.get("/queue", dependencies=[Depends(require_api_key)])
 def list_queue(status: str = "pending", db: Session = Depends(get_db)):
     items = (
         db.query(BrewmasterQueue)
@@ -111,7 +112,7 @@ def list_queue(status: str = "pending", db: Session = Depends(get_db)):
     return [_queue_dict(item, analyses.get(item.analysis_id)) for item in items]
 
 
-@router.get("/queue/{item_id}")
+@router.get("/queue/{item_id}", dependencies=[Depends(require_api_key)])
 def get_queue_item(item_id: str, db: Session = Depends(get_db)):
     item = db.query(BrewmasterQueue).filter(BrewmasterQueue.id == item_id).first()
     if not item:
@@ -123,7 +124,7 @@ def get_queue_item(item_id: str, db: Session = Depends(get_db)):
     return _queue_dict(item, analysis)
 
 
-@router.patch("/queue/{item_id}")
+@router.patch("/queue/{item_id}", dependencies=[Depends(require_api_key)])
 def update_queue_item(item_id: str, req: QueueUpdateRequest, db: Session = Depends(get_db)):
     item = db.query(BrewmasterQueue).filter(BrewmasterQueue.id == item_id).first()
     if not item:
