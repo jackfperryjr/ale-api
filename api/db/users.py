@@ -7,7 +7,7 @@ from .models import User
 
 DAILY_FREE_CREDITS = 2
 ANALYZE_COST = 1
-QUEUE_COST = 1
+QUEUE_COST = 25
 
 
 def _reset_daily_if_needed(user: User) -> None:
