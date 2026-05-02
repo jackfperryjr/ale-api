@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..db.database import get_db
-from ..db.models import Analysis
+from ..db.models import Analysis, BrewmasterQueue
 from ..db.users import ANALYZE_COST, get_or_create_user
 from ..detection.hive import detect
 
@@ -65,6 +65,52 @@ async def analyze(req: AnalyzeRequest, db: Session = Depends(get_db)):
         "cached": False,
         "credits": user.credits if user else None,
     }
+
+
+@router.get("/analyses")
+def list_analyses(limit: int = 100, db: Session = Depends(get_db)):
+    analyses = (
+        db.query(Analysis)
+        .order_by(Analysis.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    analysis_ids = [a.id for a in analyses]
+    reviews: dict = {}
+    if analysis_ids:
+        queue_items = (
+            db.query(BrewmasterQueue)
+            .filter(
+                BrewmasterQueue.analysis_id.in_(analysis_ids),
+                BrewmasterQueue.status.in_(["verified", "rejected"]),
+            )
+            .order_by(BrewmasterQueue.updated_at.desc())
+            .all()
+        )
+        for item in queue_items:
+            if item.analysis_id not in reviews:
+                reviews[item.analysis_id] = item
+
+    result = []
+    for a in analyses:
+        review = reviews.get(a.id)
+        result.append({
+            "id": a.id,
+            "url": a.url,
+            "video_id": a.video_id,
+            "reality_score": a.reality_score,
+            "label": a.label,
+            "raw_result": a.raw_result,
+            "status": a.status,
+            "session_id": a.session_id,
+            "created_at": a.created_at,
+            "review": {
+                "status": review.status,
+                "notes": review.notes,
+                "updated_at": review.updated_at,
+            } if review else None,
+        })
+    return result
 
 
 @router.get("/analyze/{analysis_id}")
